@@ -49,6 +49,21 @@ python app.py
 - `key_mapper.py`：键盘映射与状态管理逻辑
 - `tray_icon.py`：托盘图标、菜单与通知逻辑
 
+### 打包 EXE
+
+如果你希望生成可直接分发的 `exe` 文件，可以使用 `PyInstaller`：
+
+```powershell
+pip install pyinstaller
+pyinstaller --noconfirm --clean --onefile --windowed --name caps-ctrl-space --exclude-module numpy --exclude-module matplotlib --exclude-module pandas --exclude-module scipy app.py
+```
+
+打包完成后，生成的文件位于：
+
+```powershell
+dist\caps-ctrl-space.exe
+```
+
 ### 注意事项
 
 - 本工具依赖全局键盘钩子，部分环境下可能需要以管理员权限运行终端。
@@ -104,6 +119,21 @@ python app.py
 - `app.py`: application entry point
 - `key_mapper.py`: keyboard mapping and state management
 - `tray_icon.py`: tray icon, menu, and notification handling
+
+### Build EXE
+
+If you want to generate a standalone `exe`, you can use `PyInstaller`:
+
+```powershell
+pip install pyinstaller
+pyinstaller --noconfirm --clean --onefile --windowed --name caps-ctrl-space --exclude-module numpy --exclude-module matplotlib --exclude-module pandas --exclude-module scipy app.py
+```
+
+After the build completes, the executable will be available at:
+
+```powershell
+dist\caps-ctrl-space.exe
+```
 
 ### Notes
 

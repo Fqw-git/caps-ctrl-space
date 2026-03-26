@@ -19,7 +19,7 @@ pip install -r requirements.txt
 3. 启动：
 
 ```powershell
-python main.py
+python app.py
 ```
 
 ## 控制说明
@@ -27,6 +27,12 @@ python main.py
 - `Ctrl + Caps Lock`：启用/禁用映射
 - 托盘图标：显示当前状态，右键可切换映射、控制是否弹出通知、或退出
 - `Ctrl + C`：退出程序
+
+## 文件结构
+
+- `app.py`：程序入口，负责组装模块和启动后台循环
+- `key_mapper.py`：键盘映射与状态控制逻辑
+- `tray_icon.py`：系统托盘图标、菜单和状态展示
 
 ## 注意事项
 

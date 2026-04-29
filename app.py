@@ -1,5 +1,4 @@
 import atexit
-import sys
 import threading
 import time
 
@@ -23,18 +22,18 @@ def main() -> None:
 
     app.install_keyboard_hooks()
 
-    tray_thread = threading.Thread(target=tray_manager.run, daemon=True)
+    tray_thread = threading.Thread(target=tray_manager.run, name="tray-icon")
     tray_thread.start()
 
     try:
-        while not app.stop_event.is_set():
-            time.sleep(0.2)
+        while not app.stop_event.wait(0.2):
+            pass
     except KeyboardInterrupt:
         app.show_status("Exiting...")
     finally:
         app.cleanup()
         tray_manager.stop()
-        sys.exit(0)
+        tray_thread.join(timeout=2.0)
 
 
 if __name__ == "__main__":

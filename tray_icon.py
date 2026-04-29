@@ -1,11 +1,25 @@
+import queue
+import threading
+from dataclasses import dataclass
+
 import pystray
 from PIL import Image, ImageDraw
+
+from key_mapper import AppStateSnapshot
+
+
+@dataclass(frozen=True)
+class TrayRefreshRequest:
+    snapshot: AppStateSnapshot
+    show_notice: bool = False
 
 
 class TrayManager:
     def __init__(self, app) -> None:
         self.app = app
-        self.icon = None
+        self.icon: pystray.Icon | None = None
+        self.command_queue: queue.Queue[TrayRefreshRequest | None] = queue.Queue()
+        self.stop_requested = threading.Event()
 
     def build_image(self, active: bool) -> Image.Image:
         size = 64
@@ -20,27 +34,47 @@ class TrayManager:
         draw.rectangle((14, 42, 50, 48), fill=accent)
         return image
 
-    def current_status_text(self) -> str:
-        return "Caps Mapper: ON" if self.app.enabled else "Caps Mapper: OFF"
+    def current_status_text(self, active: bool) -> str:
+        return "Caps Mapper: ON" if active else "Caps Mapper: OFF"
 
-    def refresh(self, show_notice: bool = False) -> None:
+    def request_refresh(self, snapshot: AppStateSnapshot, show_notice: bool = False) -> None:
+        if self.stop_requested.is_set():
+            return
+
+        self.command_queue.put(TrayRefreshRequest(snapshot, show_notice))
+
+    def apply_refresh(self, request: TrayRefreshRequest) -> None:
         if self.icon is None:
             return
 
-        with self.app.state_lock:
-            current = self.app.enabled
-            notifications_enabled = self.app.show_notifications
-
-        self.icon.icon = self.build_image(current)
-        self.icon.title = self.current_status_text()
+        self.icon.icon = self.build_image(request.snapshot.enabled)
+        self.icon.title = self.current_status_text(request.snapshot.enabled)
         self.icon.update_menu()
 
-        if show_notice and notifications_enabled:
-            message = "Caps Lock -> Ctrl+Space enabled" if current else "Caps Lock restored"
+        if request.show_notice and request.snapshot.show_notifications:
+            message = (
+                "Caps Lock -> Ctrl+Space enabled"
+                if request.snapshot.enabled
+                else "Caps Lock restored"
+            )
             try:
                 self.icon.notify(message, "Caps Mapper")
             except Exception:
                 pass
+
+    def process_commands(self, icon: pystray.Icon) -> None:
+        icon.visible = True
+
+        while not self.stop_requested.is_set():
+            try:
+                request = self.command_queue.get(timeout=0.2)
+            except queue.Empty:
+                continue
+
+            if request is None:
+                break
+
+            self.apply_refresh(request)
 
     def on_toggle_mapping(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
         del icon, item
@@ -51,28 +85,39 @@ class TrayManager:
         self.app.toggle_notifications()
 
     def on_quit(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
-        del item
+        del icon, item
         self.app.stop_event.set()
-        icon.stop()
+        self.stop()
 
     def notifications_checked(self, item: pystray.MenuItem) -> bool:
         del item
-        with self.app.state_lock:
-            return self.app.show_notifications
+        return self.app.get_snapshot().show_notifications
 
     def create_icon(self) -> pystray.Icon:
+        snapshot = self.app.get_snapshot()
         menu = pystray.Menu(
             pystray.MenuItem("Toggle Mapping", self.on_toggle_mapping),
             pystray.MenuItem("Show Notifications", self.on_toggle_notifications, checked=self.notifications_checked),
             pystray.MenuItem("Quit", self.on_quit),
         )
-        return pystray.Icon("caps_mapper", self.build_image(self.app.enabled), self.current_status_text(), menu)
+        return pystray.Icon(
+            "caps_mapper",
+            self.build_image(snapshot.enabled),
+            self.current_status_text(snapshot.enabled),
+            menu,
+        )
 
     def run(self) -> None:
         self.icon = self.create_icon()
-        self.icon.run()
+        self.icon.run(setup=self.process_commands)
 
     def stop(self) -> None:
+        if self.stop_requested.is_set():
+            return
+
+        self.stop_requested.set()
+        self.command_queue.put(None)
+
         if self.icon is not None:
             try:
                 self.icon.stop()

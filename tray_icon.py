@@ -1,9 +1,11 @@
 import queue
+import sys
 import threading
 from dataclasses import dataclass
+from pathlib import Path
 
 import pystray
-from PIL import Image, ImageDraw
+from PIL import Image
 
 from key_mapper import AppStateSnapshot
 
@@ -20,19 +22,26 @@ class TrayManager:
         self.icon: pystray.Icon | None = None
         self.command_queue: queue.Queue[TrayRefreshRequest | None] = queue.Queue()
         self.stop_requested = threading.Event()
+        self.icon_dir = self.get_resource_dir() / "icons"
+        self.active_icon_path = self.icon_dir / "on.png"
+        self.inactive_icon_path = self.icon_dir / "off.png"
+        self._icon_cache: dict[bool, Image.Image] = {}
+
+    def get_resource_dir(self) -> Path:
+        if getattr(sys, "frozen", False):
+            return Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
+        return Path(__file__).resolve().parent
+
+    def load_image(self, path: Path) -> Image.Image:
+        with Image.open(path) as image:
+            return image.convert("RGBA").copy()
 
     def build_image(self, active: bool) -> Image.Image:
-        size = 64
-        image = Image.new("RGB", (size, size), (24, 24, 24))
-        draw = ImageDraw.Draw(image)
+        if active not in self._icon_cache:
+            path = self.active_icon_path if active else self.inactive_icon_path
+            self._icon_cache[active] = self.load_image(path)
 
-        accent = (34, 197, 94) if active else (107, 114, 128)
-        text = "A" if active else "C"
-
-        draw.rounded_rectangle((6, 6, 58, 58), radius=14, fill=(40, 40, 40), outline=accent, width=4)
-        draw.text((22, 14), text, fill=accent)
-        draw.rectangle((14, 42, 50, 48), fill=accent)
-        return image
+        return self._icon_cache[active].copy()
 
     def current_status_text(self, active: bool) -> str:
         return "Caps Mapper: ON" if active else "Caps Mapper: OFF"
